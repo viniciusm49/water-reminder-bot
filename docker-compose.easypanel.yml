@@ -1,34 +1,31 @@
+# Docker Compose otimizado para deploy direto no EasyPanel (Tipo: Compose)
 services:
   bot:
-    container_name: water_reminder_bot
     build:
-      context: .
+      context: https://github.com/viniciusm49/water-reminder-bot.git#master
       dockerfile: Dockerfile
     restart: always
     ports:
       - "3000:3000"
     environment:
       - PORT=3000
-      - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://evolution_api:8080}
-      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-429683C4C977415CAAFCCE10F7D57E11}
+      - EVOLUTION_API_URL=http://evolution_api:8080
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
       - EVOLUTION_INSTANCE_NAME=${EVOLUTION_INSTANCE_NAME:-water-bot}
-      - WATER_TARGET_GROUP_JID=${WATER_TARGET_GROUP_JID:-}
+      - WATER_TARGET_GROUP_JID=${WATER_TARGET_GROUP_JID}
       - WATER_REMINDER_CRON=${WATER_REMINDER_CRON:-0 8-20/1 * * *}
       - WATER_REMINDER_ENABLED=${WATER_REMINDER_ENABLED:-true}
     depends_on:
       - evolution_api
-    networks:
-      - evolution_net
 
   evolution_api:
-    container_name: evolution_api
     image: evoapicloud/evolution-api:v2.3.7
     restart: always
     ports:
       - "8080:8080"
     environment:
-      - SERVER_URL=${SERVER_URL:-http://localhost:8080}
-      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-429683C4C977415CAAFCCE10F7D57E11}
+      - SERVER_URL=${SERVER_URL}
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgresql://evolution:evolution_secret_pass@postgres:5432/evolution?schema=public
@@ -43,11 +40,8 @@ services:
     depends_on:
       - postgres
       - redis
-    networks:
-      - evolution_net
 
   postgres:
-    container_name: evolution_postgres
     image: postgres:16-alpine
     restart: always
     environment:
@@ -56,21 +50,12 @@ services:
       POSTGRES_DB: evolution
     volumes:
       - evolution_pgdata:/var/lib/postgresql/data
-    networks:
-      - evolution_net
 
   redis:
-    container_name: evolution_redis
     image: redis:7-alpine
     restart: always
     volumes:
       - evolution_redis:/data
-    networks:
-      - evolution_net
-
-networks:
-  evolution_net:
-    driver: bridge
 
 volumes:
   evolution_instances:

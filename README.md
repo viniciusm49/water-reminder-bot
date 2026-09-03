@@ -70,6 +70,27 @@ Pronto! O bot já está ativo e enviará mensagens no cronograma definido.
 
 ---
 
+## ☁️ Deploy no EasyPanel
+
+O projeto está 100% pronto para rodar no **EasyPanel**. Você tem duas opções práticas:
+
+### Opção 1: Usando Serviço do Tipo "Compose" (Recomendada)
+1. No painel do seu EasyPanel, entre no seu Projeto e clique em **+ Project Service** > **Compose**.
+2. Cole o conteúdo do arquivo [docker-compose.easypanel.yml](file:///home/vinicius/Repositorios/water-reminder-bot/docker-compose.easypanel.yml).
+3. Na aba **Environment** do serviço no EasyPanel, defina as variáveis:
+   - `SERVER_URL`: URL pública com HTTPS da sua Evolution API (ex: `https://evolution.seudominio.com`).
+   - `EVOLUTION_API_KEY`: uma chave forte aleatória (ex: `B6D711FCDE4D4FD5936544120E713976`).
+   - `WATER_TARGET_GROUP_JID`: JID do seu grupo no WhatsApp (ex: `120363411123140601@g.us`).
+4. Clique em **Deploy**! O EasyPanel cuidará do build automático, banco PostgreSQL, Redis, Evolution API e do Bot Nest.js com certificados SSL automáticos.
+
+### Opção 2: Usando Serviço do Tipo "App" (Build via GitHub)
+1. Crie um serviço **App** apontando para o seu repositório no GitHub.
+2. O EasyPanel detectará automaticamente o [Dockerfile](file:///home/vinicius/Repositorios/water-reminder-bot/Dockerfile) multi-stage otimizado.
+3. Configure as variáveis de ambiente apontando para a sua Evolution API (`EVOLUTION_API_URL` e `EVOLUTION_API_KEY`).
+4. Clique em **Deploy**.
+
+---
+
 ## ⚙️ Configurações do Agendador (.env)
 
 | Variável | Padrão | Descrição |
