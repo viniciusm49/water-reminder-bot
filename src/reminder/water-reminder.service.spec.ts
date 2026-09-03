@@ -15,8 +15,8 @@ describe('WaterReminderService', () => {
     evolutionServiceMock = {
       sendTextMessage: vi.fn().mockResolvedValue({ status: 'SUCCESS' }),
       getGroupParticipants: vi.fn().mockResolvedValue([
-        { id: '558811111111@s.whatsapp.net' },
-        { id: '558822222222@s.whatsapp.net' },
+        { id: '558811111111@s.whatsapp.net', name: 'Fulano' },
+        { id: '558822222222@s.whatsapp.net', name: 'Ciclano' },
       ]),
       getBotJid: vi.fn().mockResolvedValue('558899999999@s.whatsapp.net'),
       configureWebhook: vi.fn().mockResolvedValue({ status: 'SUCCESS' }),
@@ -28,6 +28,7 @@ describe('WaterReminderService', () => {
         if (key === 'WATER_REMINDER_ENABLED') return 'true';
         if (key === 'WATER_REMINDER_CRON') return '0 8-20/1 * * *';
         if (key === 'WATER_FOLLOWUP_DELAY_MINUTES') return '30';
+        if (key === 'BOT_NAME') return 'reserva';
         return defaultValue;
       }),
     };
@@ -77,7 +78,27 @@ describe('WaterReminderService', () => {
     expect(result.message).toContain('Nenhum grupo de destino configurado');
   });
 
-  it('deve reconhecer variações de OK e confirmação', () => {
+  it('deve reconhecer confirmações legítimas e NÃO aceitar risadas ou negações', () => {
+    // Risadas NUNCA devem confirmar
+    expect(service.isOkConfirmation('🤣🤣🤣🤣🤣🤣🤣🤣')).toBe(false);
+    expect(service.isOkConfirmation('😂😂😂')).toBe(false);
+    expect(service.isOkConfirmation('kkkkkkkkkkkkkkkkkkk')).toBe(false);
+    expect(service.isOkConfirmation('kkk')).toBe(false);
+    expect(service.isOkConfirmation('hahaha engraçado')).toBe(false);
+    expect(service.isOkConfirmation('rsrsrs')).toBe(false);
+    expect(service.isOkConfirmation('kakakakakakakkakaak')).toBe(false);
+
+    // Negações NUNCA devem confirmar
+    expect(service.isOkConfirmation('N dei ok aimda')).toBe(false);
+    expect(service.isOkConfirmation('não bebi ainda')).toBe(false);
+    expect(service.isOkConfirmation('ainda não')).toBe(false);
+    expect(service.isOkConfirmation('n dei ok')).toBe(false);
+
+    // Frases aleatórias
+    expect(service.isOkConfirmation('qualquer outro assunto sem confirmacao')).toBe(false);
+    expect(service.isOkConfirmation('Valeu meu fi')).toBe(false);
+
+    // Confirmações VÁLIDAS
     expect(service.isOkConfirmation('ok')).toBe(true);
     expect(service.isOkConfirmation('OK')).toBe(true);
     expect(service.isOkConfirmation('okk')).toBe(true);
@@ -85,16 +106,16 @@ describe('WaterReminderService', () => {
     expect(service.isOkConfirmation('ta ok já bebi')).toBe(true);
     expect(service.isOkConfirmation('já tomei água')).toBe(true);
     expect(service.isOkConfirmation('bebi')).toBe(true);
+    expect(service.isOkConfirmation('tomei')).toBe(true);
     expect(service.isOkConfirmation('hidratado')).toBe(true);
+    expect(service.isOkConfirmation('hidratada')).toBe(true);
     expect(service.isOkConfirmation('blz')).toBe(true);
     expect(service.isOkConfirmation('👍')).toBe(true);
-
-    expect(service.isOkConfirmation('qualquer outro assunto sem confirmacao')).toBe(false);
-    expect(service.isOkConfirmation('bloquear')).toBe(false);
+    expect(service.isOkConfirmation('✅')).toBe(true);
+    expect(service.isOkConfirmation('💧')).toBe(true);
   });
 
   it('deve processar mensagem de OK de participante e responder com elogio', async () => {
-    // Inicia rodada
     await service.sendWaterReminder();
 
     const handled = await service.handleIncomingMessage({
@@ -122,6 +143,31 @@ describe('WaterReminderService', () => {
     const round = service.getActiveRoundDetails();
     expect(round.confirmedCount).toBe(1);
     expect(round.pendingCount).toBe(1);
+  });
+
+  it('deve ignorar risos no webhook sem confirmar participante', async () => {
+    await service.sendWaterReminder();
+
+    const handled = await service.handleIncomingMessage({
+      event: 'messages.upsert',
+      data: {
+        key: {
+          remoteJid: '120363123456789@g.us',
+          participant: '558811111111@s.whatsapp.net',
+          fromMe: false,
+        },
+        pushName: 'Amor ❤️',
+        message: {
+          conversation: '🤣🤣🤣🤣🤣🤣🤣🤣',
+        },
+      },
+    });
+
+    expect(handled).toBe(false);
+
+    const round = service.getActiveRoundDetails();
+    expect(round.confirmedCount).toBe(0);
+    expect(round.pendingCount).toBe(2);
   });
 
   it('deve disparar follow-up 1 de cobrança para pendentes', async () => {
@@ -153,13 +199,18 @@ describe('WaterReminderService', () => {
     expect(categorized.categories.cobranca2UmaHora.length).toBeGreaterThan(0);
   });
 
-  it('deve ignorar o próprio número do bot na lista de participantes a serem cobrados', async () => {
+  it('deve ignorar o próprio número do bot mesmo com sufixo de dispositivo (:12) ou nome Reserva', async () => {
     (evolutionServiceMock.getBotJid as any).mockResolvedValue('558822222222@s.whatsapp.net');
+
+    (evolutionServiceMock.getGroupParticipants as any).mockResolvedValue([
+      { id: '558811111111@s.whatsapp.net', name: 'Vinicius' },
+      { id: '558822222222:12@s.whatsapp.net', name: 'Reserva' },
+    ]);
 
     await service.sendWaterReminder();
 
     const round = service.getActiveRoundDetails();
-    // Haviam 2 participantes (11111111 e 22222222). Como 22222222 é o bot, apenas o outro deve constar!
+    // Apenas o número humano (11111111) deve constar, o bot (22222222) deve ser completamente excluído!
     expect(round.totalParticipants).toBe(1);
     expect(round.pendingList).toHaveLength(1);
     expect(round.pendingList[0].jid).toBe('558811111111@s.whatsapp.net');
@@ -170,10 +221,10 @@ describe('WaterReminderService', () => {
       data: {
         key: {
           remoteJid: '120363123456789@g.us',
-          participant: '558822222222@s.whatsapp.net',
+          participant: '558822222222:12@s.whatsapp.net',
           fromMe: false,
         },
-        pushName: 'Bot',
+        pushName: 'Reserva',
         message: { conversation: 'ok' },
       },
     });

@@ -179,13 +179,14 @@ export class EvolutionService implements OnModuleInit {
   /**
    * Busca os participantes de um grupo específico
    */
-  async getGroupParticipants(groupJid: string): Promise<{ id: string; admin?: string }[]> {
+  async getGroupParticipants(groupJid: string): Promise<{ id: string; admin?: string; name?: string }[]> {
     try {
       const res = await this.http.get(`/group/findGroupInfos/${this.instanceName}?groupJid=${encodeURIComponent(groupJid)}`);
       const participants = res.data?.participants || [];
       return participants.map((p: any) => ({
         id: p.id || p.jid,
         admin: p.admin,
+        name: p.name || p.pushName || '',
       }));
     } catch (err: any) {
       this.logger.warn(`Não foi possível buscar participantes de ${groupJid}: ${err.response?.data?.message || err.message}`);
@@ -215,19 +216,35 @@ export class EvolutionService implements OnModuleInit {
     }
   }
 
+  private cachedBotJid: string | null = null;
+
   /**
    * Obtém o JID/número do próprio bot conectado na Evolution API
    */
   async getBotJid(): Promise<string | null> {
+    if (this.cachedBotJid) return this.cachedBotJid;
+
+    // 1. Tenta obter pelo .env
+    const envBotNumber = this.configService.get<string>('BOT_PHONE_NUMBER');
+    if (envBotNumber) {
+      this.cachedBotJid = envBotNumber.includes('@') ? envBotNumber : `${envBotNumber}@s.whatsapp.net`;
+      return this.cachedBotJid;
+    }
+
+    // 2. Consulta instâncias na Evolution API
     try {
       const res = await this.http.get('/instance/fetchInstances');
       const instances = Array.isArray(res.data) ? res.data : [];
       const current = instances.find((i: any) => i.name === this.instanceName);
-      return current?.ownerJid || null;
+      if (current?.ownerJid) {
+        this.cachedBotJid = current.ownerJid;
+        return this.cachedBotJid;
+      }
     } catch (err: any) {
       this.logger.warn(`Não foi possível obter o JID do bot: ${err.response?.data?.message || err.message}`);
-      return null;
     }
+
+    return null;
   }
 
   /**

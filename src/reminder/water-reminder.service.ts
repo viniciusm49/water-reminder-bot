@@ -282,23 +282,21 @@ export class WaterReminderService implements OnModuleInit {
 
     try {
       const participants = await this.evolutionService.getGroupParticipants(groupJid);
-      const botJid = await this.evolutionService.getBotJid();
-      const botNumber = botJid ? botJid.split('@')[0] : null;
 
       for (const p of participants) {
         // Ignora identificadores vazios
         if (!p.id) continue;
 
-        // Ignora o próprio número/JID do bot
-        const participantNumber = p.id.split('@')[0];
-        if (botJid && (p.id === botJid || participantNumber === botNumber)) {
-          this.logger.log(`Número do próprio bot (${p.id}) excluído da lista de checagem.`);
+        // Ignora o próprio número/JID do bot (por número limpo sem device, ou por nome "reserva")
+        const isBot = await this.isBotUser(p.id, p.name);
+        if (isBot) {
+          this.logger.log(`Número do próprio bot (${p.id} - ${p.name || 'Bot'}) excluído da lista de checagem.`);
           continue;
         }
 
         participantsMap[p.id] = {
           jid: p.id,
-          name: '',
+          name: p.name || '',
           confirmed: false,
         };
       }
@@ -385,21 +383,84 @@ export class WaterReminderService implements OnModuleInit {
   }
 
   /**
-   * Verifica se um texto recebido contém confirmação ("ok", "bebi", etc.)
+   * Extrai apenas os dígitos do número de telefone de um JID,
+   * removendo sufixo de dispositivo (:1, :12, etc.) e sufixo de domínio (@s.whatsapp.net)
+   */
+  extractCleanPhone(jid: string): string {
+    if (!jid) return '';
+    const userPart = jid.split('@')[0].split(':')[0];
+    return userPart.replace(/\D/g, '');
+  }
+
+  /**
+   * Verifica se o participante ou mensagem pertence ao próprio bot
+   */
+  async isBotUser(jid: string, name?: string): Promise<boolean> {
+    if (!jid) return false;
+
+    const cleanUser = this.extractCleanPhone(jid);
+
+    // 1. Compara com botJid obtido dinamicamente da Evolution API
+    const botJid = await this.evolutionService.getBotJid();
+    const cleanBot = this.extractCleanPhone(botJid || '');
+    if (cleanBot && cleanUser && cleanBot === cleanUser) {
+      return true;
+    }
+
+    // 2. Compara com BOT_PHONE_NUMBER configurado no .env
+    const configuredPhone = this.configService.get<string>('BOT_PHONE_NUMBER', '');
+    if (configuredPhone && cleanUser && cleanUser === this.extractCleanPhone(configuredPhone)) {
+      return true;
+    }
+
+    // 3. Compara com BOT_NAME configurado no .env (ou nome padrão "reserva")
+    const configuredBotName = this.configService.get<string>('BOT_NAME', 'reserva').toLowerCase().trim();
+    if (configuredBotName && name && name.toLowerCase().includes(configuredBotName)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Verifica se um texto recebido contém confirmação real ("ok", "bebi", etc.),
+   * ignorando risadas, memes e negações.
    */
   isOkConfirmation(text: string): boolean {
     if (!text) return false;
-    const normalized = text
+
+    const raw = text.trim();
+
+    // 1. Rejeição imediata se contiver emojis de riso (com flag /u obrigatória para unicode surrogate pairs)
+    if (/[😂🤣😆😅😹]/u.test(raw)) {
+      return false;
+    }
+
+    const normalized = raw
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '') // remove acentos
       .trim();
 
-    // Palavras que indicam confirmação com tolerância a repetição (ok, okk, okay, bebi, tomei, pronto, etc.)
-    const okRegex = /\b(o+k+|o+k+a+y+|o+k+e+y+|blz|beleza|bebi|tomei|feito|pronto|hidratad[oa]|fechou|confirmad[oa]|partiu)\b/i;
-    const emojiRegex = /[👍✅💧🥤🚰👌]/;
+    // 2. Rejeição de risadas em texto (kkk, kakaka, hahaha, rsrsrs, jajaja, engraçado, etc.)
+    const laughterRegex = /(\bk{2,}\b|\b(k+a+){2,}k*\b|\b(h+[aeiou]+){2,}\b|\b(r+s+){2,}r*\b|\b(j+a+){2,}j*\b|\bengracad[oa]\b)/i;
+    if (laughterRegex.test(normalized)) {
+      return false;
+    }
 
-    return okRegex.test(normalized) || emojiRegex.test(text);
+    // 3. Rejeição de negações (ex: "n dei ok", "não bebi", "ainda nao", etc.)
+    const negationRegex = /(^|\b)(nao|n|nem|ainda\s+nao|nunca|nao\s+dei|n\s+dei|nao\s+bebi|n\s+bebi|nao\s+tomei|n\s+tomei)\b/i;
+    if (negationRegex.test(normalized)) {
+      return false;
+    }
+
+    // 4. Confirmação positiva por palavras-chave
+    const okRegex = /\b(o+k+|o+k+a+y+|o+k+e+y+|blz|beleza|bebi|tomei|feito|pronto|hidratad[oa]|fechou|confirmad[oa]|partiu)\b/i;
+
+    // 5. Confirmação por emojis específicos (OBRIGATÓRIO usar flag /u)
+    const emojiRegex = /[👍✅💧🥤🚰👌]/u;
+
+    return okRegex.test(normalized) || emojiRegex.test(raw);
   }
 
   /**
@@ -430,12 +491,10 @@ export class WaterReminderService implements OnModuleInit {
       return false;
     }
 
-    const botJid = await this.evolutionService.getBotJid();
-    if (botJid) {
-      const botNumber = botJid.split('@')[0];
-      if (participantJid === botJid || participantJid.split('@')[0] === botNumber) {
-        return false;
-      }
+    // Ignora mensagens vindas do próprio bot (por número ou nome "reserva")
+    const isBot = await this.isBotUser(participantJid, pushName);
+    if (isBot) {
+      return false;
     }
 
     if (this.isOkConfirmation(text)) {
@@ -456,9 +515,16 @@ export class WaterReminderService implements OnModuleInit {
       return;
     }
 
-    // Busca o participante correspondente no mapa
+    // Se for o próprio bot, ignora
+    const isBot = await this.isBotUser(participantJid, pushName);
+    if (isBot) {
+      return;
+    }
+
+    // Busca o participante correspondente no mapa (usando número limpo sem device)
+    const cleanParticipant = this.extractCleanPhone(participantJid);
     let existingKey = Object.keys(this.activeRound.participants).find(
-      (k) => k === participantJid || k.split('@')[0] === participantJid.split('@')[0],
+      (k) => k === participantJid || this.extractCleanPhone(k) === cleanParticipant,
     );
 
     if (!existingKey) {
