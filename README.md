@@ -102,7 +102,8 @@ Pronto! O bot já está ativo e enviará mensagens no cronograma definido.
   ```
 
 ### Lembrete de Água
-- **`POST /reminder/trigger`**: Dispara imediatamente um alerta de água para o grupo configurado (ótimo para testes rápidos).
+- **`GET ou POST /reminder/trigger`**: Dispara imediatamente um alerta de água para o grupo configurado (ótimo para testar direto pelo navegador em http://localhost:3000/reminder/trigger).
+  - Parâmetro opcional: `?target=120363...g.us`
 - **`GET /reminder/status`**: Estatísticas de envio (total enviado hoje, último disparo, status).
 - **`GET /reminder/preview`**: Mostra os modelos de mensagens de hidratação pré-cadastrados.
 
