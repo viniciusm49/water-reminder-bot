@@ -63,8 +63,12 @@ export class EvolutionService implements OnModuleInit {
   async ensureInstanceExists(): Promise<void> {
     try {
       const state = await this.getConnectionState();
+      if (state.state === 'error') {
+        this.logger.warn(`Evolution API não acessível em ${this.apiUrl}. Inicie a Evolution API com 'docker compose up -d'.`);
+        return;
+      }
       if (state.state !== 'not_created') {
-        this.logger.log(`Instância "${this.instanceName}" já existe com status: ${state.state}`);
+        this.logger.log(`Instância "${this.instanceName}" encontrada com status: ${state.state}`);
         return;
       }
     } catch (e) {
