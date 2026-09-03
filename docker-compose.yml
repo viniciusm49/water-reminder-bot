@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   evolution_api:
     container_name: evolution_api
-    image: atendai/evolution-api:v2.2.3
+    image: evoapicloud/evolution-api:v2.2.3
     restart: always
     ports:
       - "8080:8080"
@@ -13,10 +11,12 @@ services:
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgresql://evolution:evolution_secret_pass@postgres:5432/evolution?schema=public
-      - REDIS_ENABLED=true
-      - REDIS_URI=redis://redis:6379
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379/6
       - DEL_INSTANCE=false
-      - LOG_LEVEL=ERROR,WARN,INFO
+      - CONFIG_SESSION_PHONE_VERSION=
+      - LOG_BAILEYS=debug
+      - LOG_LEVEL=ERROR,WARN,INFO,DEBUG,LOG,VERBOSE
     volumes:
       - evolution_instances:/evolution/instances
     depends_on:
