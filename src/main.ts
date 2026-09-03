@@ -7,7 +7,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const port = process.env.PORT ?? 3000;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
 
   logger.log('====================================================');
   logger.log(`💧 Water Reminder Bot rodando em: http://localhost:${port}`);
