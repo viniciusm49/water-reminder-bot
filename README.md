@@ -122,11 +122,17 @@ O projeto está 100% pronto para rodar no **EasyPanel**. Você tem duas opções
   { "to": "120363...g.us", "text": "Mensagem de teste" }
   ```
 
-### Lembrete de Água
-- **`GET ou POST /reminder/trigger`**: Dispara imediatamente um alerta de água para o grupo configurado (ótimo para testar direto pelo navegador em http://localhost:3000/reminder/trigger).
+### Lembrete de Água e Ciclo de Confirmação (OK)
+- **`GET ou POST /reminder/trigger`**: Dispara imediatamente um alerta de água para o grupo configurado e inicia a rodada de espera pelo "OK" dos participantes.
   - Parâmetro opcional: `?target=120363...g.us`
-- **`GET /reminder/status`**: Estatísticas de envio (total enviado hoje, último disparo, status).
-- **`GET /reminder/preview`**: Mostra os modelos de mensagens de hidratação pré-cadastrados.
+- **`GET /reminder/round`**: Mostra em tempo real os participantes do grupo, quem já deu OK e quem está pendente na rodada atual.
+- **`GET ou POST /reminder/trigger-followup`**: Força o disparo manual da mensagem de cobrança para quem ainda não deu OK (passando `?step=1` para 30min ou `?step=2` para última chamada).
+- **`POST /reminder/simulate-ok`**: Simula um participante enviando "ok" no grupo (útil para testes de desenvolvimento):
+  ```json
+  { "name": "Vinicius", "text": "ok já bebi!" }
+  ```
+- **`GET /reminder/preview`**: Mostra o catálogo completo de 38 mensagens organizadas por período (manhã, tarde, noite), humor/memes, elogios ao dar OK e cobranças.
+- **`GET /reminder/status`**: Estatísticas gerais de envio e resumo da rodada ativa.
 
 ---
 

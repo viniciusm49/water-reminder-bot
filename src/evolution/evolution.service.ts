@@ -147,26 +147,71 @@ export class EvolutionService implements OnModuleInit {
   }
 
   /**
-   * Envia uma mensagem de texto para um número ou ID de grupo (ex: 120363xxx@g.us)
+   * Envia uma mensagem de texto para um número ou ID de grupo (com suporte opcional a menções)
    */
-  async sendTextMessage(number: string, text: string): Promise<any> {
+  async sendTextMessage(number: string, text: string, mentioned?: string[]): Promise<any> {
     if (!number) {
       throw new Error('Número ou Group JID de destino não fornecido.');
     }
 
     try {
-      const res = await this.http.post(`/message/sendText/${this.instanceName}`, {
+      const payload: any = {
         number,
         text,
         options: {
           delay: 1200,
           presence: 'composing',
         },
-      });
+      };
+
+      if (mentioned && mentioned.length > 0) {
+        payload.mentioned = mentioned;
+      }
+
+      const res = await this.http.post(`/message/sendText/${this.instanceName}`, payload);
       return res.data;
     } catch (err: any) {
       this.logger.error(`Falha ao enviar mensagem para ${number}: ${err.response?.data?.message || err.message}`);
       throw new Error(`Falha no envio da mensagem: ${JSON.stringify(err.response?.data || err.message)}`);
+    }
+  }
+
+  /**
+   * Busca os participantes de um grupo específico
+   */
+  async getGroupParticipants(groupJid: string): Promise<{ id: string; admin?: string }[]> {
+    try {
+      const res = await this.http.get(`/group/findGroupInfos/${this.instanceName}?groupJid=${encodeURIComponent(groupJid)}`);
+      const participants = res.data?.participants || [];
+      return participants.map((p: any) => ({
+        id: p.id || p.jid,
+        admin: p.admin,
+      }));
+    } catch (err: any) {
+      this.logger.warn(`Não foi possível buscar participantes de ${groupJid}: ${err.response?.data?.message || err.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Configura o webhook na Evolution API para receber mensagens recebidas
+   */
+  async configureWebhook(webhookUrl: string): Promise<any> {
+    try {
+      const payload = {
+        webhook: {
+          enabled: true,
+          url: webhookUrl,
+          byEvents: false,
+          base64: false,
+          events: ['MESSAGES_UPSERT'],
+        },
+      };
+      const res = await this.http.post(`/webhook/set/${this.instanceName}`, payload);
+      this.logger.log(`Webhook da Evolution API configurado para: ${webhookUrl}`);
+      return res.data;
+    } catch (err: any) {
+      this.logger.warn(`Aviso ao registrar webhook da Evolution API: ${err.response?.data?.message || err.message}`);
     }
   }
 

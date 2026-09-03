@@ -1,11 +1,16 @@
-import { Body, Controller, Get, Header, Logger, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Header, Inject, Logger, Post, Query, forwardRef } from '@nestjs/common';
 import { EvolutionService } from './evolution.service.js';
+import { WaterReminderService } from '../reminder/water-reminder.service.js';
 
 @Controller('evolution')
 export class EvolutionController {
   private readonly logger = new Logger(EvolutionController.name);
 
-  constructor(private readonly evolutionService: EvolutionService) {}
+  constructor(
+    private readonly evolutionService: EvolutionService,
+    @Inject(forwardRef(() => WaterReminderService))
+    private readonly waterReminderService: WaterReminderService,
+  ) {}
 
   @Get('status')
   async getStatus() {
@@ -178,6 +183,18 @@ export class EvolutionController {
   @Post('webhook')
   async handleWebhook(@Body() payload: any) {
     this.logger.debug(`Webhook recebido da Evolution API: ${JSON.stringify(payload?.event || payload?.type || 'evento')}`);
-    return { received: true };
+    const handled = await this.waterReminderService.handleIncomingMessage(payload);
+    return { received: true, handled };
+  }
+
+  @Get('webhook/setup')
+  async setupWebhook(@Query('url') customUrl?: string) {
+    const defaultUrl = customUrl || 'http://bot:3333/evolution/webhook';
+    const result = await this.evolutionService.configureWebhook(defaultUrl);
+    return {
+      success: true,
+      message: `Webhook configurado para ${defaultUrl}`,
+      result,
+    };
   }
 }

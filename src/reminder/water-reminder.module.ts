@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { WaterReminderService } from './water-reminder.service.js';
@@ -9,7 +9,7 @@ import { EvolutionModule } from '../evolution/evolution.module.js';
   imports: [
     ConfigModule,
     ScheduleModule.forRoot(),
-    EvolutionModule,
+    forwardRef(() => EvolutionModule),
   ],
   controllers: [WaterReminderController],
   providers: [WaterReminderService],
