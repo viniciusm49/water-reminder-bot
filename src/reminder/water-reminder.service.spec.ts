@@ -51,12 +51,13 @@ describe('WaterReminderService', () => {
     expect(result.target).toBe('120363123456789@g.us');
     expect(evolutionServiceMock.sendTextMessage).toHaveBeenCalledWith(
       '120363123456789@g.us',
-      expect.stringContaining('ÁGUA'),
+      expect.stringMatching(/água/i),
     );
 
     const stats = service.getStats();
     expect(stats.totalSent).toBe(1);
     expect(stats.lastSentAt).toBeDefined();
+    expect(stats.totalMessagesAvailable).toBeGreaterThanOrEqual(20);
   });
 
   it('deve avisar se nenhum grupo for configurado', async () => {
@@ -66,9 +67,16 @@ describe('WaterReminderService', () => {
     expect(result.message).toContain('Nenhum grupo de destino configurado');
   });
 
-  it('deve retornar lista de mensagens disponíveis', () => {
+  it('deve retornar lista de mensagens disponíveis e manter as originais', () => {
     const messages = service.getMessagesList();
-    expect(messages.length).toBeGreaterThan(0);
+    expect(messages.length).toBeGreaterThanOrEqual(20);
     expect(messages[0]).toContain('HORA DE BEBER ÁGUA');
+
+    const categorized = service.getCategorizedMessages();
+    expect(categorized.categories.originais.length).toBe(6);
+    expect(categorized.categories.manha.length).toBeGreaterThan(0);
+    expect(categorized.categories.tarde.length).toBeGreaterThan(0);
+    expect(categorized.categories.noite.length).toBeGreaterThan(0);
+    expect(categorized.categories.humorEMemes.length).toBeGreaterThan(0);
   });
 });

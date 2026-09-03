@@ -27,7 +27,7 @@ export class WaterReminderController {
   getPreview() {
     return {
       success: true,
-      messages: this.waterReminderService.getMessagesList(),
+      data: this.waterReminderService.getCategorizedMessages(),
     };
   }
 }
