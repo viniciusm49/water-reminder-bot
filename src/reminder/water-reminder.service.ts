@@ -188,20 +188,30 @@ export class WaterReminderService implements OnModuleInit {
     const textToSend = this.getNextMessage();
     const period = this.getCurrentPeriod();
 
-    this.logger.log(`Enviando lembrete de água (${period}) para ${target}...`);
-    await this.evolutionService.sendTextMessage(target, textToSend);
+    try {
+      this.logger.log(`Enviando lembrete de água (${period}) para ${target}...`);
+      await this.evolutionService.sendTextMessage(target, textToSend);
 
-    this.totalSent++;
-    this.lastSentAt = new Date();
+      this.totalSent++;
+      this.lastSentAt = new Date();
 
-    this.logger.log(`Lembrete de água enviado com sucesso para ${target}! Total enviados hoje: ${this.totalSent}`);
+      this.logger.log(`Lembrete de água enviado com sucesso para ${target}! Total enviados hoje: ${this.totalSent}`);
 
-    return {
-      success: true,
-      message: textToSend,
-      target,
-      period,
-    };
+      return {
+        success: true,
+        message: textToSend,
+        target,
+        period,
+      };
+    } catch (err: any) {
+      this.logger.error(`Falha ao enviar lembrete: ${err.message}`);
+      return {
+        success: false,
+        message: `Falha no envio da mensagem. Verifique se o WhatsApp está conectado no status 'open'. Erro: ${err.message}`,
+        target,
+        period,
+      };
+    }
   }
 
   /**
