@@ -166,20 +166,28 @@ export class WaterReminderService implements OnModuleInit {
       return;
     }
 
+    const tz = this.configService.get<string>('REMINDER_TIMEZONE', 'America/Sao_Paulo');
+
     try {
-      const job = new CronJob(cronExpression, async () => {
-        this.logger.log('Disparo do Cron de Lembrete de Água acionado.');
-        try {
-          await this.sendWaterReminder();
-        } catch (err: any) {
-          this.logger.error(`Erro ao disparar lembrete agendado: ${err.message}`);
-        }
-      });
+      const job = new CronJob(
+        cronExpression,
+        async () => {
+          this.logger.log('Disparo do Cron de Lembrete de Água acionado.');
+          try {
+            await this.sendWaterReminder();
+          } catch (err: any) {
+            this.logger.error(`Erro ao disparar lembrete agendado: ${err.message}`);
+          }
+        },
+        null,
+        false,
+        tz,
+      );
 
       this.schedulerRegistry.addCronJob('water-reminder-cron', job);
       job.start();
 
-      this.logger.log(`Cron de lembrete de água registrado com sucesso! Expressão: "${cronExpression}"`);
+      this.logger.log(`Cron de lembrete de água registrado com sucesso! Expressão: "${cronExpression}" [Fuso: ${tz}]`);
       if (!targetGroup) {
         this.logger.warn('⚠️ ATENÇÃO: WATER_TARGET_GROUP_JID ainda não foi configurado no .env! Acesse /evolution/groups para encontrar o JID do seu grupo.');
       } else {
