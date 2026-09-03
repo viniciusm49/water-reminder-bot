@@ -18,6 +18,7 @@ describe('WaterReminderService', () => {
         { id: '558811111111@s.whatsapp.net' },
         { id: '558822222222@s.whatsapp.net' },
       ]),
+      getBotJid: vi.fn().mockResolvedValue('558899999999@s.whatsapp.net'),
       configureWebhook: vi.fn().mockResolvedValue({ status: 'SUCCESS' }),
     };
 
@@ -150,5 +151,32 @@ describe('WaterReminderService', () => {
     expect(categorized.categories.elogiosEParabensOK.length).toBeGreaterThan(0);
     expect(categorized.categories.cobranca1MeiaHora.length).toBeGreaterThan(0);
     expect(categorized.categories.cobranca2UmaHora.length).toBeGreaterThan(0);
+  });
+
+  it('deve ignorar o próprio número do bot na lista de participantes a serem cobrados', async () => {
+    (evolutionServiceMock.getBotJid as any).mockResolvedValue('558822222222@s.whatsapp.net');
+
+    await service.sendWaterReminder();
+
+    const round = service.getActiveRoundDetails();
+    // Haviam 2 participantes (11111111 e 22222222). Como 22222222 é o bot, apenas o outro deve constar!
+    expect(round.totalParticipants).toBe(1);
+    expect(round.pendingList).toHaveLength(1);
+    expect(round.pendingList[0].jid).toBe('558811111111@s.whatsapp.net');
+
+    // Mensagem enviada pelo bot não deve acionar verificação
+    const handledBotMessage = await service.handleIncomingMessage({
+      event: 'messages.upsert',
+      data: {
+        key: {
+          remoteJid: '120363123456789@g.us',
+          participant: '558822222222@s.whatsapp.net',
+          fromMe: false,
+        },
+        pushName: 'Bot',
+        message: { conversation: 'ok' },
+      },
+    });
+    expect(handledBotMessage).toBe(false);
   });
 });

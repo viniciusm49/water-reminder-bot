@@ -274,9 +274,20 @@ export class WaterReminderService implements OnModuleInit {
 
     try {
       const participants = await this.evolutionService.getGroupParticipants(groupJid);
+      const botJid = await this.evolutionService.getBotJid();
+      const botNumber = botJid ? botJid.split('@')[0] : null;
+
       for (const p of participants) {
         // Ignora identificadores vazios
         if (!p.id) continue;
+
+        // Ignora o próprio número/JID do bot
+        const participantNumber = p.id.split('@')[0];
+        if (botJid && (p.id === botJid || participantNumber === botNumber)) {
+          this.logger.log(`Número do próprio bot (${p.id}) excluído da lista de checagem.`);
+          continue;
+        }
+
         participantsMap[p.id] = {
           jid: p.id,
           name: '',
@@ -409,6 +420,14 @@ export class WaterReminderService implements OnModuleInit {
     const targetGroup = this.configService.get<string>('WATER_TARGET_GROUP_JID', '');
     if (targetGroup && remoteJid !== targetGroup) {
       return false;
+    }
+
+    const botJid = await this.evolutionService.getBotJid();
+    if (botJid) {
+      const botNumber = botJid.split('@')[0];
+      if (participantJid === botJid || participantJid.split('@')[0] === botNumber) {
+        return false;
+      }
     }
 
     if (this.isOkConfirmation(text)) {

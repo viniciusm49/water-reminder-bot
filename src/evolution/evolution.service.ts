@@ -216,6 +216,21 @@ export class EvolutionService implements OnModuleInit {
   }
 
   /**
+   * Obtém o JID/número do próprio bot conectado na Evolution API
+   */
+  async getBotJid(): Promise<string | null> {
+    try {
+      const res = await this.http.get('/instance/fetchInstances');
+      const instances = Array.isArray(res.data) ? res.data : [];
+      const current = instances.find((i: any) => i.name === this.instanceName);
+      return current?.ownerJid || null;
+    } catch (err: any) {
+      this.logger.warn(`Não foi possível obter o JID do bot: ${err.response?.data?.message || err.message}`);
+      return null;
+    }
+  }
+
+  /**
    * Busca todos os grupos em que o bot está participando
    */
   async fetchAllGroups(): Promise<GroupItem[]> {
