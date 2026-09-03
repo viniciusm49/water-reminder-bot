@@ -5,8 +5,8 @@ services:
       context: https://github.com/viniciusm49/water-reminder-bot.git#master
       dockerfile: Dockerfile
     restart: always
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       - PORT=3000
       - EVOLUTION_API_URL=http://evolution_api:8080
@@ -21,10 +21,10 @@ services:
   evolution_api:
     image: evoapicloud/evolution-api:v2.3.7
     restart: always
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     environment:
-      - SERVER_URL=${SERVER_URL}
+      - SERVER_URL=${SERVER_URL:-http://localhost:8080}
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
