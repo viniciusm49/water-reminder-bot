@@ -15,11 +15,10 @@ export interface ActiveRound {
   id: string;
   groupJid: string;
   startedAt: string;
-  step: 'initial' | 'followup1' | 'followup2' | 'finished';
+  step: 'initial' | 'followup_sent' | 'finished';
   status: 'active' | 'all_confirmed' | 'expired';
   participants: Record<string, ParticipantStatus>;
-  timerFollowup1?: any;
-  timerFollowup2?: any;
+  timerFollowup?: any;
   timerGiveUp?: any;
 }
 
@@ -51,8 +50,10 @@ export class WaterReminderService implements OnModuleInit {
   private lastMessageSent = '';
   private messageIndex = 0;
   private praiseIndex = 0;
-  private followup1Index = 0;
-  private followup2Index = 0;
+  private followupIndex = 0;
+
+  // Cache de JIDs conhecidos do próprio bot (LIDs, telefones limpos, etc.)
+  private readonly knownBotJids: Set<string> = new Set();
 
   // Estado da rodada de acompanhamento ativa
   private activeRound: ActiveRound | null = null;
@@ -112,19 +113,13 @@ export class WaterReminderService implements OnModuleInit {
     '🧊 *Show de bola, {name}!* Presença confirmada no time dos bem hidratados. Segue o jogo com energia total! ⚡🥛',
   ];
 
-  // 7. Mensagens de Cobrança 1 (30 minutos após o alerta de água)
-  private readonly firstFollowupMessages: string[] = [
-    '👀 *COBRANÇA DA ÁGUA (30 MINUTOS):* ⏰💧\n\nOi {names}, vi que você ainda não confirmou que bebeu água! Já tomou seu copo ou a correria fez esquecer? Mandem um *ok* aqui no grupo pra confirmar! 🚰🧐',
-    '🚨 *PATRULHA DA HIDRATAÇÃO PASSANDO:* 🚨\n\nCadê o *ok* de vocês, {names}? A notificação de água foi há meia hora e ainda nada da confirmação! Vão lá se hidratar e avisem aqui com um *ok*! 🏃‍♂️💦',
-    '🌵 *ALERTA DE DESERTO:* 🌵\n\n{names}, nada de se transformar em cacto! Já passaram 30 minutos do alerta: levantem agora, tomem 1 copão d\'água e respondam com um *ok* pra gente saber! 🥤👀',
-    '💧 *CHECAGEM PENDENTE:* ⏱️\n\n{names}, ainda esperando a confirmação da água! Tudo certo por aí? Tomem aquele gole esperto e mandem o *ok* pra validar! 🧠✨',
-  ];
-
-  // 8. Mensagens de Cobrança 2 (60 minutos após o alerta - Última chamada)
-  private readonly secondFollowupMessages: string[] = [
-    '📢 *ÚLTIMA CHAMADA DA ÁGUA:* 🚨⏰\n\n{names}, já faz 1 hora da notificação e nada do seu *ok*! Não me deixa na mão nem faça o rim sofrer. Vai lá beber água agora e me manda esse *ok*! 💧🙏',
-    '⏳ *ÚLTIMA CHANCE DE PONTUAR:* ⌛🚰\n\n{names}, o tempo tá acabando! Última chamada pra confirmar a hidratação dessa rodada. Corre pro filtro, bebe aquele copo e manda um *ok*! 🏃‍♂️💨',
-    '🪨 *AVISO DO DEPARTAMENTO DE UROLOGIA:* 🏥😅\n\n{names}, 1 hora sem confirmar a água! O departamento contra pedras nos rins está em alerta vermelho. Beba água agora e responda *ok* antes que eu desista de cobrar! 💦⚡',
+  // 7. Mensagens de Cobrança Única da Água (1 hora após o alerta)
+  private readonly followupMessages: string[] = [
+    '👀 *COBRANÇA DA ÁGUA (1 HORA):* ⏰💧\n\nOi {names}, vi que você ainda não confirmou que bebeu água! Já faz 1 hora do alerta. Já tomou seu copo ou a correria fez esquecer? Mande um *ok* aqui no grupo pra confirmar! 🚰🧐',
+    '📢 *LEMBRETE DE HIDRATAÇÃO:* 🚨⏰\n\n{names}, já faz 1 hora da notificação e nada do seu *ok*! Não me deixa na mão nem faça o rim sofrer. Vai lá beber água agora e manda o *ok* pra confirmar! 💧🙏',
+    '🌵 *ALERTA DE DESERTO:* 🌵\n\n{names}, nada de se transformar em cacto! Já passou 1 hora do alerta: levantem agora, tomem 1 copão d\'água e respondam com um *ok* pra gente saber! 🥤👀',
+    '⏳ *HORA DA CHECAGEM:* ⌛🚰\n\n{names}, 1 hora se passou e a sua garrafa de água continua cheia? Corre pro filtro, bebe aquele copo caprichado e manda um *ok*! 🏃‍♂️💨',
+    '🪨 *AVISO DO DEPARTAMENTO DE UROLOGIA:* 🏥😅\n\n{names}, 1 hora sem confirmar a água! O departamento contra pedras nos rins está em alerta. Beba água agora e responda *ok* antes que eu desista de cobrar! 💦⚡',
   ];
 
   constructor(
@@ -199,12 +194,12 @@ export class WaterReminderService implements OnModuleInit {
   }
 
   /**
-   * Intervalo de cobrança em minutos (padrão: 30 minutos)
+   * Intervalo de cobrança em minutos (padrão: 60 minutos / 1 hora)
    */
   getFollowupDelayMinutes(): number {
-    const val = this.configService.get<string>('WATER_FOLLOWUP_DELAY_MINUTES', '30');
+    const val = this.configService.get<string>('WATER_FOLLOWUP_DELAY_MINUTES', '60');
     const num = parseInt(val, 10);
-    return isNaN(num) || num <= 0 ? 30 : num;
+    return isNaN(num) || num <= 0 ? 60 : num;
   }
 
   /**
@@ -267,8 +262,7 @@ export class WaterReminderService implements OnModuleInit {
    */
   private clearRoundTimers(round: ActiveRound | null) {
     if (!round) return;
-    if (round.timerFollowup1) clearTimeout(round.timerFollowup1);
-    if (round.timerFollowup2) clearTimeout(round.timerFollowup2);
+    if (round.timerFollowup) clearTimeout(round.timerFollowup);
     if (round.timerGiveUp) clearTimeout(round.timerGiveUp);
   }
 
@@ -287,7 +281,7 @@ export class WaterReminderService implements OnModuleInit {
         // Ignora identificadores vazios
         if (!p.id) continue;
 
-        // Ignora o próprio número/JID do bot (por número limpo sem device, ou por nome "reserva")
+        // Ignora o próprio número/JID do bot (por número limpo sem device, ou por nome configurado)
         const isBot = await this.isBotUser(p.id, p.name);
         if (isBot) {
           this.logger.log(`Número do próprio bot (${p.id} - ${p.name || 'Bot'}) excluído da lista de checagem.`);
@@ -304,10 +298,9 @@ export class WaterReminderService implements OnModuleInit {
       this.logger.warn(`Não foi possível pré-carregar participantes para cobrança: ${e.message}`);
     }
 
-    const delayMinutes = this.getFollowupDelayMinutes();
-    const delay1 = delayMinutes * 60 * 1000;
-    const delay2 = delay1 * 2;
-    const delay3 = delay1 * 3;
+    const delayMinutes = this.getFollowupDelayMinutes(); // padrão: 60 minutos (1 hora)
+    const delayCobrança = delayMinutes * 60 * 1000;
+    const delayGiveUp = delayCobrança + (30 * 60 * 1000); // 30 minutos após a cobrança (total 90 min)
 
     this.activeRound = {
       id: roundId,
@@ -318,22 +311,17 @@ export class WaterReminderService implements OnModuleInit {
       participants: participantsMap,
     };
 
-    // Follow-up 1 (+30 min)
-    this.activeRound.timerFollowup1 = setTimeout(() => {
-      this.runFollowup1(roundId);
-    }, delay1);
+    // Cobrança Única (+60 min / 1 hora)
+    this.activeRound.timerFollowup = setTimeout(() => {
+      this.runFollowup(roundId);
+    }, delayCobrança);
 
-    // Follow-up 2 (+60 min)
-    this.activeRound.timerFollowup2 = setTimeout(() => {
-      this.runFollowup2(roundId);
-    }, delay2);
-
-    // Desistência (+90 min)
+    // Desistência (+90 min no total)
     this.activeRound.timerGiveUp = setTimeout(() => {
       this.runGiveUp(roundId);
-    }, delay3);
+    }, delayGiveUp);
 
-    this.logger.log(`Rodada de acompanhamento #${roundId} iniciada para ${groupJid}. Follow-up 1 em ${delayMinutes} min, Follow-up 2 em ${delayMinutes * 2} min.`);
+    this.logger.log(`Rodada de acompanhamento #${roundId} iniciada para ${groupJid}. Cobrança única agendada para daqui a ${delayMinutes} min.`);
   }
 
   /**
@@ -354,7 +342,11 @@ export class WaterReminderService implements OnModuleInit {
 
     try {
       this.logger.log(`Enviando lembrete de água (${period}) para ${target}...`);
-      await this.evolutionService.sendTextMessage(target, textToSend);
+      const sendResult = await this.evolutionService.sendTextMessage(target, textToSend);
+
+      // Captura o JID retornado pelo envio para registrar o bot instantaneamente
+      if (sendResult?.key?.participant) this.registerBotJid(sendResult.key.participant);
+      if (sendResult?.key?.participantAlt) this.registerBotJid(sendResult.key.participantAlt);
 
       this.totalSent++;
       this.lastSentAt = new Date();
@@ -383,6 +375,16 @@ export class WaterReminderService implements OnModuleInit {
   }
 
   /**
+   * Registra um JID/LID/número confirmado como pertencente ao bot
+   */
+  registerBotJid(jid: string) {
+    if (!jid) return;
+    this.knownBotJids.add(jid);
+    const clean = this.extractCleanPhone(jid);
+    if (clean) this.knownBotJids.add(clean);
+  }
+
+  /**
    * Extrai apenas os dígitos do número de telefone de um JID,
    * removendo sufixo de dispositivo (:1, :12, etc.) e sufixo de domínio (@s.whatsapp.net)
    */
@@ -398,25 +400,42 @@ export class WaterReminderService implements OnModuleInit {
   async isBotUser(jid: string, name?: string): Promise<boolean> {
     if (!jid) return false;
 
+    // 0. Verifica cache de JIDs/LIDs conhecidos do bot
+    if (this.knownBotJids.has(jid)) return true;
     const cleanUser = this.extractCleanPhone(jid);
+    if (cleanUser && this.knownBotJids.has(cleanUser)) return true;
 
     // 1. Compara com botJid obtido dinamicamente da Evolution API
     const botJid = await this.evolutionService.getBotJid();
-    const cleanBot = this.extractCleanPhone(botJid || '');
-    if (cleanBot && cleanUser && cleanBot === cleanUser) {
-      return true;
+    if (botJid) {
+      this.registerBotJid(botJid);
+      const cleanBot = this.extractCleanPhone(botJid);
+      if (cleanBot && cleanUser && cleanBot === cleanUser) {
+        return true;
+      }
     }
 
     // 2. Compara com BOT_PHONE_NUMBER configurado no .env
     const configuredPhone = this.configService.get<string>('BOT_PHONE_NUMBER', '');
-    if (configuredPhone && cleanUser && cleanUser === this.extractCleanPhone(configuredPhone)) {
-      return true;
+    if (configuredPhone) {
+      const cleanConfigured = this.extractCleanPhone(configuredPhone);
+      if (cleanUser && cleanConfigured && cleanUser === cleanConfigured) {
+        this.registerBotJid(jid);
+        return true;
+      }
     }
 
-    // 3. Compara com BOT_NAME configurado no .env (ou nome padrão "reserva")
-    const configuredBotName = this.configService.get<string>('BOT_NAME', 'reserva').toLowerCase().trim();
-    if (configuredBotName && name && name.toLowerCase().includes(configuredBotName)) {
-      return true;
+    // 3. Compara com BOT_NAME configurado no .env
+    const configuredBotName = this.configService.get<string>('BOT_NAME', '').toLowerCase().trim();
+    if (configuredBotName) {
+      if (name && name.toLowerCase().includes(configuredBotName)) {
+        this.registerBotJid(jid);
+        return true;
+      }
+      if (jid.toLowerCase().includes(configuredBotName)) {
+        this.registerBotJid(jid);
+        return true;
+      }
     }
 
     return false;
@@ -474,7 +493,15 @@ export class WaterReminderService implements OnModuleInit {
 
     const data = payload?.data || payload;
     const key = data?.key;
-    if (!key || key.fromMe) return false;
+    if (!key) return false;
+
+    // Se a mensagem foi enviada pelo próprio bot (fromMe), registra os identificadores e encerra
+    if (key.fromMe) {
+      if (key.participant) this.registerBotJid(key.participant);
+      if (key.participantAlt) this.registerBotJid(key.participantAlt);
+      if (key.remoteJid && !key.remoteJid.includes('@g.us')) this.registerBotJid(key.remoteJid);
+      return false;
+    }
 
     const remoteJid: string = key.remoteJid || '';
     const participantJid: string = key.participant || remoteJid;
@@ -491,7 +518,7 @@ export class WaterReminderService implements OnModuleInit {
       return false;
     }
 
-    // Ignora mensagens vindas do próprio bot (por número ou nome "reserva")
+    // Ignora mensagens vindas do próprio bot (por número ou nome configurado)
     const isBot = await this.isBotUser(participantJid, pushName);
     if (isBot) {
       return false;
@@ -585,68 +612,47 @@ export class WaterReminderService implements OnModuleInit {
   }
 
   /**
-   * Executa a cobrança 1 (30 minutos após o alerta)
+   * Executa a cobrança única da água (1 hora após o alerta)
    */
-  async runFollowup1(roundId: string) {
+  async runFollowup(roundId: string) {
     if (!this.activeRound || this.activeRound.id !== roundId || this.activeRound.status !== 'active') {
       return;
     }
 
-    const unconfirmed = Object.values(this.activeRound.participants).filter((p) => !p.confirmed);
+    // Filtra participantes pendentes garantindo exclusão do bot
+    const unconfirmed: ParticipantStatus[] = [];
+    for (const p of Object.values(this.activeRound.participants)) {
+      if (!p.confirmed) {
+        const isBot = await this.isBotUser(p.jid, p.name);
+        if (!isBot) {
+          unconfirmed.push(p);
+        } else {
+          this.logger.log(`Excluindo bot identificado antes da cobrança: ${p.jid}`);
+        }
+      }
+    }
+
     if (unconfirmed.length === 0) {
-      this.logger.log(`Follow-up 1 (#${roundId}): Todos já confirmaram. Nenhuma cobrança necessária.`);
+      this.logger.log(`Cobrança de 1 hora (#${roundId}): Todos já confirmaram. Nenhuma cobrança necessária.`);
       return;
     }
 
-    this.activeRound.step = 'followup1';
+    this.activeRound.step = 'followup_sent';
 
     const mentions = unconfirmed.map((u) => u.jid);
     const namesStr = unconfirmed.map((u) => (u.name ? `@${u.name}` : `@${u.jid.split('@')[0]}`)).join(', ');
 
-    const template = this.firstFollowupMessages[this.followup1Index % this.firstFollowupMessages.length];
-    this.followup1Index++;
+    const template = this.followupMessages[this.followupIndex % this.followupMessages.length];
+    this.followupIndex++;
 
     const textToSend = template.replace(/{names}/g, namesStr);
 
-    this.logger.log(`Disparando Follow-up 1 para ${unconfirmed.length} participantes pendentes em ${this.activeRound.groupJid}...`);
+    this.logger.log(`Disparando Cobrança Única de 1 hora para ${unconfirmed.length} participantes pendentes em ${this.activeRound.groupJid}...`);
 
     try {
       await this.evolutionService.sendTextMessage(this.activeRound.groupJid, textToSend, mentions);
     } catch (err: any) {
-      this.logger.error(`Erro ao disparar Follow-up 1: ${err.message}`);
-    }
-  }
-
-  /**
-   * Executa a cobrança 2 (60 minutos após o alerta - Última chamada)
-   */
-  async runFollowup2(roundId: string) {
-    if (!this.activeRound || this.activeRound.id !== roundId || this.activeRound.status !== 'active') {
-      return;
-    }
-
-    const unconfirmed = Object.values(this.activeRound.participants).filter((p) => !p.confirmed);
-    if (unconfirmed.length === 0) {
-      this.logger.log(`Follow-up 2 (#${roundId}): Todos já confirmaram.`);
-      return;
-    }
-
-    this.activeRound.step = 'followup2';
-
-    const mentions = unconfirmed.map((u) => u.jid);
-    const namesStr = unconfirmed.map((u) => (u.name ? `@${u.name}` : `@${u.jid.split('@')[0]}`)).join(', ');
-
-    const template = this.secondFollowupMessages[this.followup2Index % this.secondFollowupMessages.length];
-    this.followup2Index++;
-
-    const textToSend = template.replace(/{names}/g, namesStr);
-
-    this.logger.log(`Disparando Follow-up 2 (Última chamada) para ${unconfirmed.length} pendentes em ${this.activeRound.groupJid}...`);
-
-    try {
-      await this.evolutionService.sendTextMessage(this.activeRound.groupJid, textToSend, mentions);
-    } catch (err: any) {
-      this.logger.error(`Erro ao disparar Follow-up 2: ${err.message}`);
+      this.logger.error(`Erro ao disparar Cobrança de 1 hora: ${err.message}`);
     }
   }
 
@@ -695,18 +701,14 @@ export class WaterReminderService implements OnModuleInit {
   }
 
   /**
-   * Força a execução manual de um follow-up para testes imediatos
+   * Força a execução manual da cobrança para testes imediatos
    */
   async triggerManualFollowup(step: '1' | '2' = '1') {
     if (!this.activeRound) {
       return { success: false, message: 'Nenhuma rodada ativa para cobrar.' };
     }
-    if (step === '2') {
-      await this.runFollowup2(this.activeRound.id);
-    } else {
-      await this.runFollowup1(this.activeRound.id);
-    }
-    return { success: true, message: `Follow-up ${step} disparado manualmente.`, step };
+    await this.runFollowup(this.activeRound.id);
+    return { success: true, message: 'Cobrança de 1 hora disparada manualmente.', step };
   }
 
   /**
@@ -753,7 +755,7 @@ export class WaterReminderService implements OnModuleInit {
    */
   getCategorizedMessages() {
     return {
-      total: this.getMessagesList().length + this.praiseMessages.length + this.firstFollowupMessages.length + this.secondFollowupMessages.length,
+      total: this.getMessagesList().length + this.praiseMessages.length + this.followupMessages.length,
       currentPeriod: this.getCurrentPeriod(),
       categories: {
         originais: this.originalMessages,
@@ -762,8 +764,7 @@ export class WaterReminderService implements OnModuleInit {
         noite: this.eveningMessages,
         humorEMemes: this.humorousMessages,
         elogiosEParabensOK: this.praiseMessages,
-        cobranca1MeiaHora: this.firstFollowupMessages,
-        cobranca2UmaHora: this.secondFollowupMessages,
+        cobrancaUmaHora: this.followupMessages,
       },
     };
   }

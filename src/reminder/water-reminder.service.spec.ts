@@ -28,7 +28,7 @@ describe('WaterReminderService', () => {
         if (key === 'WATER_REMINDER_ENABLED') return 'true';
         if (key === 'WATER_REMINDER_CRON') return '0 8-20/1 * * *';
         if (key === 'WATER_FOLLOWUP_DELAY_MINUTES') return '30';
-        if (key === 'BOT_NAME') return 'reserva';
+        if (key === 'BOT_NAME') return 'meubot';
         return defaultValue;
       }),
     };
@@ -170,15 +170,15 @@ describe('WaterReminderService', () => {
     expect(round.pendingCount).toBe(2);
   });
 
-  it('deve disparar follow-up 1 de cobrança para pendentes', async () => {
+  it('deve disparar cobrança única de 1 hora para pendentes', async () => {
     await service.sendWaterReminder();
 
-    const followupResult = await service.triggerManualFollowup('1');
+    const followupResult = await service.triggerManualFollowup();
     expect(followupResult.success).toBe(true);
 
     expect(evolutionServiceMock.sendTextMessage).toHaveBeenCalledWith(
       '120363123456789@g.us',
-      expect.stringMatching(/COBRANÇA DA ÁGUA|PATRULHA|ALERTA DE DESERTO|CHECAGEM/),
+      expect.stringMatching(/COBRANÇA DA ÁGUA|LEMBRETE DE HIDRATAÇÃO|ALERTA DE DESERTO|CHECAGEM/),
       expect.arrayContaining(['558811111111@s.whatsapp.net', '558822222222@s.whatsapp.net']),
     );
   });
@@ -195,16 +195,15 @@ describe('WaterReminderService', () => {
     expect(categorized.categories.noite.length).toBeGreaterThan(0);
     expect(categorized.categories.humorEMemes.length).toBeGreaterThan(0);
     expect(categorized.categories.elogiosEParabensOK.length).toBeGreaterThan(0);
-    expect(categorized.categories.cobranca1MeiaHora.length).toBeGreaterThan(0);
-    expect(categorized.categories.cobranca2UmaHora.length).toBeGreaterThan(0);
+    expect(categorized.categories.cobrancaUmaHora.length).toBeGreaterThan(0);
   });
 
-  it('deve ignorar o próprio número do bot mesmo com sufixo de dispositivo (:12) ou nome Reserva', async () => {
+  it('deve ignorar o próprio número do bot mesmo com sufixo de dispositivo (:12) ou nome MeuBot', async () => {
     (evolutionServiceMock.getBotJid as any).mockResolvedValue('558822222222@s.whatsapp.net');
 
     (evolutionServiceMock.getGroupParticipants as any).mockResolvedValue([
       { id: '558811111111@s.whatsapp.net', name: 'Vinicius' },
-      { id: '558822222222:12@s.whatsapp.net', name: 'Reserva' },
+      { id: '558822222222:12@s.whatsapp.net', name: 'MeuBot' },
     ]);
 
     await service.sendWaterReminder();
@@ -224,7 +223,7 @@ describe('WaterReminderService', () => {
           participant: '558822222222:12@s.whatsapp.net',
           fromMe: false,
         },
-        pushName: 'Reserva',
+        pushName: 'MeuBot',
         message: { conversation: 'ok' },
       },
     });

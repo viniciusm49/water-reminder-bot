@@ -225,7 +225,7 @@ export class EvolutionService implements OnModuleInit {
     if (this.cachedBotJid) return this.cachedBotJid;
 
     // 1. Tenta obter pelo .env
-    const envBotNumber = this.configService.get<string>('BOT_PHONE_NUMBER');
+    const envBotNumber = this.configService.get<string>('BOT_PHONE_NUMBER', '');
     if (envBotNumber) {
       this.cachedBotJid = envBotNumber.includes('@') ? envBotNumber : `${envBotNumber}@s.whatsapp.net`;
       return this.cachedBotJid;
@@ -235,9 +235,13 @@ export class EvolutionService implements OnModuleInit {
     try {
       const res = await this.http.get('/instance/fetchInstances');
       const instances = Array.isArray(res.data) ? res.data : [];
-      const current = instances.find((i: any) => i.name === this.instanceName);
+      const current = instances.find((i: any) => i.name === this.instanceName) || instances[0];
       if (current?.ownerJid) {
         this.cachedBotJid = current.ownerJid;
+        return this.cachedBotJid;
+      }
+      if (current?.number) {
+        this.cachedBotJid = `${current.number}@s.whatsapp.net`;
         return this.cachedBotJid;
       }
     } catch (err: any) {

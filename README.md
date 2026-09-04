@@ -95,13 +95,17 @@ O projeto está 100% pronto para rodar no **EasyPanel**. Você tem duas opções
 
 | Variável | Padrão | Descrição |
 | :--- | :--- | :--- |
-| `PORT` | `3000` | Porta HTTP do Nest.js |
-| `EVOLUTION_API_URL` | `http://localhost:8080` | URL da Evolution API |
+| `PORT` | `3333` | Porta HTTP interna do Nest.js |
+| `EVOLUTION_API_URL` | `http://evolution_api:8080` | URL da Evolution API |
 | `EVOLUTION_API_KEY` | `429683C4...` | Chave de autenticação global |
 | `EVOLUTION_INSTANCE_NAME` | `water-bot` | Nome da instância do WhatsApp |
 | `WATER_TARGET_GROUP_JID` | *(vazio)* | JID do grupo WhatsApp de destino |
 | `WATER_REMINDER_CRON` | `0 8-20/1 * * *` | Expressão cron de envio |
 | `WATER_REMINDER_ENABLED` | `true` | Ativa ou pausa os alertas automáticos |
+| `WATER_FOLLOWUP_DELAY_MINUTES` | `60` | Tempo até a cobrança única (1 hora) |
+| `BOT_PHONE_NUMBER` | *(vazio)* | Número do bot para exclusão automática de cobrança (opcional) |
+| `BOT_NAME` | *(vazio)* | Nome ou termo para identificar o contato do bot (opcional) |
+| `REMINDER_TIMEZONE` | `America/Sao_Paulo` | Fuso horário para o Cron e mensagens |
 
 ### Exemplos de Expressão Cron:
 - `0 8-20/1 * * *` -> A cada 1 hora entre as 08:00 e 20:00 (todos os dias).
@@ -126,12 +130,12 @@ O projeto está 100% pronto para rodar no **EasyPanel**. Você tem duas opções
 - **`GET ou POST /reminder/trigger`**: Dispara imediatamente um alerta de água para o grupo configurado e inicia a rodada de espera pelo "OK" dos participantes.
   - Parâmetro opcional: `?target=120363...g.us`
 - **`GET /reminder/round`**: Mostra em tempo real os participantes do grupo, quem já deu OK e quem está pendente na rodada atual.
-- **`GET ou POST /reminder/trigger-followup`**: Força o disparo manual da mensagem de cobrança para quem ainda não deu OK (passando `?step=1` para 30min ou `?step=2` para última chamada).
+- **`GET ou POST /reminder/trigger-followup`**: Força o disparo manual da cobrança de 1 hora para quem ainda não deu OK.
 - **`POST /reminder/simulate-ok`**: Simula um participante enviando "ok" no grupo (útil para testes de desenvolvimento):
   ```json
   { "name": "Vinicius", "text": "ok já bebi!" }
   ```
-- **`GET /reminder/preview`**: Mostra o catálogo completo de 38 mensagens organizadas por período (manhã, tarde, noite), humor/memes, elogios ao dar OK e cobranças.
+- **`GET /reminder/preview`**: Mostra o catálogo completo de mensagens organizadas por período (manhã, tarde, noite), humor/memes, elogios ao dar OK e cobrança de 1 hora.
 - **`GET /reminder/status`**: Estatísticas gerais de envio e resumo da rodada ativa.
 
 ---
